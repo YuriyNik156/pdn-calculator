@@ -1,5 +1,5 @@
 from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models import (
     PDNRequestSchema,
@@ -215,8 +215,12 @@ def calculate_pdn(request: PDNRequestSchema) -> CalcResultSchema:
     advice = "Допустимая долговая нагрузка." if status == "ok" else ("Повышенная долговая нагрузка." if status == "warning" else "Критичное значение ПДН.")
 
     # Формируем meta
-    meta = MetaSchema(ts=datetime.utcnow().isoformat() + "Z", calc_version=getattr(request.meta, "calc_version", "0.1.0") if request.meta else "0.1.0", risk_band=risk_band)
-
+    meta = MetaSchema(
+        ts=datetime.now(timezone.utc).isoformat(),
+        calc_version=getattr(request.meta, "calc_version", "0.1.0") if request.meta else "0.1.0",
+        risk_band=risk_band
+    )
+    
     # Расширяем breakdown (добавим суммарную линию)
     breakdown.append({"name": "TOTAL", "monthly": monthly_obligations_total})
 
