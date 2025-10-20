@@ -1,0 +1,10 @@
+# Временные и системные файлы
+
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.git/
+.gitignore
+tests/
+.env
