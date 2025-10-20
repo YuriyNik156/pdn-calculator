@@ -1,5 +1,5 @@
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 
 # --- Входные модели --- #
 
@@ -9,22 +9,25 @@ class IncomeSchema(BaseModel):
     currency: str = Field(..., min_length=3, max_length=3, description="Валюта (ISO код, например, RUB, USD, EUR)")
 
 class ObligationSchema(BaseModel):
-    type: Literal["loan", "credit_card", "alimony", "installment"] = Field(..., description="Тип обязательства")
-    monthly_payment: Optional[float] = Field(None, ge=0, description="Ежемесячный платеж")
-    balance: Optional[float] = Field(None, ge=0, description="Остаток задолженности")
-    min_payment_rate: Optional[float] = Field(None, ge=0, le=1, description="Минимальный платёж по карте (доля от баланса)")
+    type: str
+    monthly_payment: Optional[float] = None
+    balance: Optional[float] = None
+    min_payment_rate: Optional[float] = None
 
-    @validator("monthly_payment", always=True)
-    def validate_payment(cls, v, values):
-        """
-        У каждого обязательства должен быть либо monthly_payment > 0,
-        либо комбинация balance + min_payment_rate.
-        """
-        if v and v > 0:
-            return v
-        if (values.get("balance") and values.get("min_payment_rate")):
-            return v
-        raise ValueError("Должен быть указан либо monthly_payment > 0, либо balance и min_payment_rate")
+    @model_validator(mode="after")
+    def validate_payment_combo(self):
+        has_payment = self.monthly_payment is not None and self.monthly_payment > 0
+        has_balance_rate = (
+            self.balance is not None
+            and self.min_payment_rate is not None
+            and self.min_payment_rate > 0
+        )
+
+        if not (has_payment or has_balance_rate):
+            raise ValueError(
+                "Должен быть указан либо monthly_payment > 0, либо balance и min_payment_rate"
+            )
+        return self
 
 
 class ScenarioSchema(BaseModel):
