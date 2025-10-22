@@ -1,10 +1,13 @@
 from fastapi import FastAPI, Header, Request, HTTPException
 from fastapi.responses import JSONResponse
-from app.services import calculate_pdn
 from datetime import datetime, timezone
-import logging
 import time
 import uuid
+import logging
+
+from app.services import calculate_pdn
+from app.logger import logger
+from app.audit import write_audit_log, read_audit_by_request_id
 
 # --- Инициализация FastAPI ---
 app = FastAPI(
@@ -13,16 +16,35 @@ app = FastAPI(
     version="1.0"
 )
 
-# --- Логирование ---
-logger = logging.getLogger("pdn_logger")
-logging.basicConfig(level=logging.INFO)
-
 # --- Конфигурация ---
 CONFIG = {
     "risk_bands": ["low", "medium", "high"],
     "cc_default_rate": 0.35,
     "calc_version": "1.0"
 }
+
+
+# --- Middleware: добавляем request_id и базовое логирование ---
+@app.middleware("http")
+async def add_request_id_and_logging(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+
+    logger.info(f"Request {request_id} started: {request.method} {request.url}")
+    start_time = time.time()
+
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        logger.exception(f"Unhandled error in request {request_id}: {e}")
+        raise
+
+    duration_ms = int((time.time() - start_time) * 1000)
+    logger.info(f"Request {request_id} completed in {duration_ms}ms with status {response.status_code}")
+
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 # --- Обработчики ошибок ---
 @app.exception_handler(HTTPException)
@@ -38,6 +60,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         }
     )
 
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     logger.exception("Unexpected error: %s", str(exc))
@@ -52,15 +75,21 @@ async def generic_exception_handler(request: Request, exc: Exception):
         }
     )
 
+
 # --- GET / (Health check) ---
 @app.get("/")
 async def root():
     return {"message": "PDN Calculator API is running!"}
 
+
 # --- POST /pdn/calc ---
 @app.post("/pdn/calc")
 async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v1.0")):
-    request_id = str(uuid.uuid4())
+    """
+    Рассчитывает PDN по входным данным.
+    Пишет аудит в файл audit.log.
+    """
+    request_id = request.state.request_id
     start = time.time()
 
     try:
@@ -85,11 +114,31 @@ async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v
         "ts": ts,
         "duration_ms": duration_ms
     }
-    logger.info(f"AUDIT_LOG: {audit_data}")
 
-    return {"data": pdn_result, "meta": {"ts": ts}}
+    # ✅ Пишем лог в консоль и в audit.log
+    logger.info(f"AUDIT_LOG: {audit_data}")
+    write_audit_log(request_id, "/pdn/calc", payload, pdn_result)
+
+    return {"data": pdn_result, "meta": {"ts": ts, "request_id": request_id}}
+
 
 # --- GET /pdn/config ---
 @app.get("/pdn/config")
 async def get_config():
+    """
+    Возвращает текущие параметры расчёта PDN.
+    """
     return {"data": CONFIG, "meta": {"ts": datetime.now(timezone.utc).isoformat()}}
+
+
+# --- GET /admin/pdn/audit ---
+@app.get("/admin/pdn/audit")
+async def get_audit(request_id: str):
+    """
+    Возвращает audit-запись по request_id.
+    ⚠️ В продакшене сюда нужен RBAC (например, роль ADMIN).
+    """
+    logs = read_audit_by_request_id(request_id)
+    if not logs:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    return {"data": logs, "meta": {"ts": datetime.now(timezone.utc).isoformat()}}
