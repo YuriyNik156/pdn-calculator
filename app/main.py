@@ -5,7 +5,7 @@ import time
 import uuid
 import logging
 
-from app.models import PDNRequest
+from app.models import PDNRequestSchema
 from app.services import calculate_pdn
 from app.logger import logger
 from app.audit import write_audit_log, read_audit_by_request_id
@@ -86,44 +86,37 @@ async def root():
 # --- POST /pdn/calc ---
 @app.post("/pdn/calc")
 async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v1.0")):
-    """
-    Рассчитывает PDN по входным данным.
-    Пишет аудит в файл audit.log.
-    """
     request_id = request.state.request_id
     start = time.time()
 
     try:
-        payload_dict = await request.json()
-        payload = PDNRequest(**payload_dict)  # ✅ Преобразуем в объект модели
+        payload = await request.json()
+        pdn_request = PDNRequestSchema(**payload)  # 🔹 вот эта строчка
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
 
     try:
-        pdn_result = calculate_pdn(payload)
+        pdn_result = calculate_pdn(pdn_request)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except AttributeError as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка структуры данных: {e}")
 
     duration_ms = int((time.time() - start) * 1000)
     ts = datetime.now(timezone.utc).isoformat()
 
     audit_data = {
         "request_id": request_id,
-        "client_id": payload.client_id,
+        "subject_type": pdn_request.subject_type,
         "calc_version": x_pdn_calc_version,
-        "scenario": getattr(payload, "scenario", None),
-        "pdn_percent": pdn_result.get("pdn_percent"),
+        "scenario": pdn_request.scenario.mode,
+        "pdn_ratio": pdn_result.pdn_ratio,
         "ts": ts,
         "duration_ms": duration_ms
     }
 
-    # ✅ Пишем лог в консоль и в audit.log
     logger.info(f"AUDIT_LOG: {audit_data}")
-    write_audit_log(request_id, "/pdn/calc", payload_dict, pdn_result)
+    write_audit_log(request_id, "/pdn/calc", pdn_request.dict(), pdn_result.dict())
 
-    return {"data": pdn_result, "meta": {"ts": ts, "request_id": request_id}}
+    return {"data": pdn_result.dict(), "meta": {"ts": ts, "request_id": request_id}}
 
 
 # --- GET /pdn/config ---
