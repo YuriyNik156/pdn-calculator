@@ -1,147 +1,51 @@
-from fastapi import FastAPI, Header, Request, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from datetime import datetime, timezone
-import time
-import uuid
-import os
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+from .models import PDNRequestSchema
+from .services import calculate_pdn
+from .audit import get_audit_by_request
 
-from app.models import PDNRequestSchema, CalcResultSchema
-from app.services import calculate_pdn
-from app.logger import logger
-from app.audit import write_audit_log, read_audit_by_request_id
+APP_VERSION = "v1.0"  # Версия формулы/сервиса
 
-# --- Инициализация FastAPI ---
-app = FastAPI(
-    title="PDN Calculator API",
-    description="API для расчёта показателя долговой нагрузки (PDN)",
-    version="1.0"
+app = FastAPI(title="PDN Calculator MVP")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# --- Конфигурация ---
-CONFIG = {
-    "risk_bands": ["low", "medium", "high"],
-    "credit_card_default_min_rate": 0.05,
-    "calc_version": "v1.0"
-}
-
-
-# --- Middleware: добавляем request_id и базовое логирование ---
-@app.middleware("http")
-async def add_request_id_and_logging(request: Request, call_next):
-    request_id = str(uuid.uuid4())
-    request.state.request_id = request_id
-
-    logger.info(f"Request {request_id} started: {request.method} {request.url}")
-    start_time = time.time()
-
-    try:
-        response = await call_next(request)
-    except Exception as e:
-        logger.exception(f"Unhandled error in request {request_id}: {e}")
-        raise
-
-    duration_ms = int((time.time() - start_time) * 1000)
-    logger.info(f"Request {request_id} completed in {duration_ms}ms with status {response.status_code}")
-
-    response.headers["X-Request-ID"] = request_id
-    return response
-
-
-# --- Обработчики ошибок ---
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": {"code": exc.status_code, "message": exc.detail},
-            "meta": {"ts": datetime.now(timezone.utc).isoformat()}
-        }
-    )
-
-
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unexpected error: %s", str(exc))
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": {"code": 500, "message": "Internal Server Error"},
-            "meta": {"ts": datetime.now(timezone.utc).isoformat()}
-        }
-    )
-
-
-# --- GET /health ---
-@app.get("/health")
-async def health_check():
-    return {"message": "PDN Calculator API is running!"}
-
-
-# --- POST /pdn/calc ---
 @app.post("/pdn/calc")
-async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v1.0")):
-    request_id = request.state.request_id
-    start_time = time.time()
-
+async def pdn_calc(request: PDNRequestSchema):
     try:
-        payload = await request.json()
-        pdn_request = PDNRequestSchema(**payload)
+        result = calculate_pdn(request)
+
+        # Возвращаем результат с заголовком версии
+        return JSONResponse(
+            content=result,
+            headers={"X-PDN-Calc-Version": APP_VERSION}
+        )
+    except ValidationError as ve:
+        raise HTTPException(status_code=400, detail=ve.errors())
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
-
-    try:
-        pdn_result: CalcResultSchema = calculate_pdn(pdn_request)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    duration_ms = int((time.time() - start_time) * 1000)
-    ts = datetime.now(timezone.utc).isoformat()
-
-    audit_data = {
-        "request_id": request_id,
-        "client_id": getattr(pdn_request, "client_id", None),
-        "subject_type": pdn_request.subject_type,
-        "calc_version": x_pdn_calc_version,
-        "scenario": pdn_request.scenario.mode,
-        "pdn_percent": pdn_result.pdn_percent,
-        "ts": ts,
-        "duration_ms": duration_ms
-    }
-    logger.info(f"AUDIT_LOG: {audit_data}")
-    write_audit_log(request_id, "/pdn/calc", pdn_request.dict(), pdn_result.dict())
-
-    meta_response = {
-        "ts": ts,
-        "request_id": request_id,
-        "client_id": getattr(pdn_request, "client_id", None)
-    }
-
-    return {"data": pdn_result.dict(), "meta": meta_response}
+        raise HTTPException(status_code=500, detail="Internal calculation error")
 
 
-# --- GET /pdn/config ---
-@app.get("/pdn/config")
-async def get_config():
-    """Возвращает текущие параметры расчёта PDN."""
-    return {"data": CONFIG, "meta": {"ts": datetime.now(timezone.utc).isoformat()}}
-
-
-# --- GET /admin/pdn/audit ---
 @app.get("/admin/pdn/audit")
-async def get_audit(request_id: str):
-    """Возвращает audit-запись по request_id. В продакшене нужен RBAC."""
-    logs = read_audit_by_request_id(request_id)
+def audit_logs(request_id: str = Query(..., description="ID запроса для поиска")):
+    """Возвращает аудит логов входа/выхода по конкретному request_id"""
+    logs = get_audit_by_request(request_id)
     if not logs:
-        raise HTTPException(status_code=404, detail="Запись не найдена")
-    return {"data": logs, "meta": {"ts": datetime.now(timezone.utc).isoformat()}}
-
-
-# --- Отдача фронтенда ---
-app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
-
-@app.get("/")
-def serve_index():
-    print(">>> INDEX ROUTE CALLED <<<")
-    index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
-    return FileResponse(index_path)
+        return JSONResponse(
+            content={"request_id": request_id, "logs": [], "message": "Записи не найдены"},
+            headers={"X-PDN-Calc-Version": APP_VERSION}
+        )
+    return JSONResponse(
+        content={"request_id": request_id, "logs": logs},
+        headers={"X-PDN-Calc-Version": APP_VERSION}
+    )

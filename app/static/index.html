@@ -6,7 +6,7 @@
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         label { display: block; margin-top: 10px; }
-        input { margin-top: 2px; padding: 5px; width: 200px; }
+        input, select { margin-top: 2px; padding: 5px; width: 200px; }
         button { margin-top: 10px; padding: 5px 10px; }
         .obligation { margin-bottom: 5px; }
         .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
@@ -20,9 +20,33 @@
 <h2>PDN Calculator MVP</h2>
 
 <form id="pdnForm">
+    <h4>Доход</h4>
     <label>
-        Доход (RUB):
+        Сумма:
         <input type="number" id="incomeAmount" required min="0" step="any" value="100000">
+    </label>
+    <label>
+        Валюта:
+        <select id="incomeCurrency">
+            <option value="RUB" selected>RUB</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+        </select>
+    </label>
+    <label>
+        Тип дохода:
+        <select id="incomeType">
+            <option value="net" selected>net</option>
+            <option value="gross">gross</option>
+        </select>
+    </label>
+    <label>
+        Источник:
+        <select id="incomeSource">
+            <option value="salary" selected>salary</option>
+            <option value="business">business</option>
+            <option value="other">other</option>
+        </select>
     </label>
 
     <label>
@@ -32,7 +56,6 @@
 
     <div id="obligationsContainer">
         <h4>Обязательства</h4>
-        <!-- Динамические обязательства добавятся сюда -->
     </div>
     <button type="button" id="addObligationBtn">Добавить обязательство</button>
 
@@ -53,6 +76,24 @@
         Шок платежей (%):
         <input type="number" id="paymentShock" step="0.01" value="0">
     </label>
+    <label id="refinanceLabel" style="display:none;">
+        Параметры рефинансирования (JSON):
+        <input type="text" id="refinanceInput" placeholder='{"loan_id": "123", "new_monthly_payment": 20000}'>
+    </label>
+
+    <h4>Настройки (assumptions)</h4>
+    <label>
+        Минимальный платёж по кредитным картам (%):
+        <input type="number" id="defaultMinPaymentRate" step="0.01" value="0.05">
+    </label>
+    <label>
+        Округление денег:
+        <input type="number" id="roundingMoney" value="2">
+    </label>
+    <label>
+        Округление процентов:
+        <input type="number" id="roundingPercent" value="2">
+    </label>
 
     <button type="submit">Рассчитать PDN</button>
 </form>
@@ -61,6 +102,12 @@
 
 <script>
 let obligationCount = 0;
+
+// Показываем/скрываем поле refinance для target
+document.getElementById('scenarioMode').addEventListener('change', function(){
+    const label = document.getElementById('refinanceLabel');
+    label.style.display = this.value === 'target' ? 'block' : 'none';
+});
 
 function addObligation() {
     obligationCount++;
@@ -97,21 +144,27 @@ function addObligation() {
     `;
     container.appendChild(div);
 }
-
 document.getElementById('addObligationBtn').addEventListener('click', addObligation);
+
+// Генерация UUID для meta.request_id
+function generateUUID() {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+}
 
 document.getElementById('pdnForm').addEventListener('submit', async function(e){
     e.preventDefault();
 
-    // Собираем доход
+    // Доход
     const income = {
         amount: parseFloat(document.getElementById('incomeAmount').value),
-        currency: "RUB",
-        income_type: "net",
-        source: "salary"
+        currency: document.getElementById('incomeCurrency').value,
+        income_type: document.getElementById('incomeType').value,
+        source: document.getElementById('incomeSource').value
     };
 
-    // Собираем обязательства
+    // Обязательства
     const obligations = [];
     for(let i=1; i<=obligationCount; i++){
         const type = document.getElementById(`obl_type_${i}`).value;
@@ -124,10 +177,21 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
     }
 
     // Сценарий
+    const refinanceRaw = document.getElementById('refinanceInput').value;
     const scenario = {
         mode: document.getElementById('scenarioMode').value,
         income_shock_pct: parseFloat(document.getElementById('incomeShock').value),
-        payment_shock_pct: parseFloat(document.getElementById('paymentShock').value)
+        payment_shock_pct: parseFloat(document.getElementById('paymentShock').value),
+        refinance: refinanceRaw ? JSON.parse(refinanceRaw) : null
+    };
+
+    // Assumptions
+    const assumptions = {
+        credit_card_default_min_rate: parseFloat(document.getElementById('defaultMinPaymentRate').value),
+        rounding: {
+            money: parseInt(document.getElementById('roundingMoney').value),
+            percent: parseInt(document.getElementById('roundingPercent').value)
+        }
     };
 
     const payload = {
@@ -136,7 +200,12 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
         income,
         obligations,
         scenario,
-        meta: { client_id: "CLIENT123", calc_version: "v1.0" }
+        assumptions,
+        meta: {
+            client_id: "CLIENT123",
+            request_id: generateUUID(),
+            calc_version: "v1.0"
+        }
     };
 
     try {
@@ -145,10 +214,8 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-
         const data = await res.json();
         displayResult(data);
-
     } catch (err) {
         document.getElementById('result').innerText = "Ошибка запроса: " + err;
     }
