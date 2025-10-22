@@ -5,6 +5,7 @@ import time
 import uuid
 import logging
 
+from app.models import PDNRequest
 from app.services import calculate_pdn
 from app.logger import logger
 from app.audit import write_audit_log, read_audit_by_request_id
@@ -93,23 +94,26 @@ async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v
     start = time.time()
 
     try:
-        payload = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        payload_dict = await request.json()
+        payload = PDNRequest(**payload_dict)  # ✅ Преобразуем в объект модели
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {e}")
 
     try:
         pdn_result = calculate_pdn(payload)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except AttributeError as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка структуры данных: {e}")
 
     duration_ms = int((time.time() - start) * 1000)
     ts = datetime.now(timezone.utc).isoformat()
 
     audit_data = {
         "request_id": request_id,
-        "client_id": payload.get("client_id"),
+        "client_id": payload.client_id,
         "calc_version": x_pdn_calc_version,
-        "scenario": payload.get("scenario"),
+        "scenario": getattr(payload, "scenario", None),
         "pdn_percent": pdn_result.get("pdn_percent"),
         "ts": ts,
         "duration_ms": duration_ms
@@ -117,7 +121,7 @@ async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v
 
     # ✅ Пишем лог в консоль и в audit.log
     logger.info(f"AUDIT_LOG: {audit_data}")
-    write_audit_log(request_id, "/pdn/calc", payload, pdn_result)
+    write_audit_log(request_id, "/pdn/calc", payload_dict, pdn_result)
 
     return {"data": pdn_result, "meta": {"ts": ts, "request_id": request_id}}
 
