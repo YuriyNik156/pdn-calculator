@@ -27,7 +27,7 @@ def get_audit_by_request(request_id: str, log_file="audit.log"):
     """Ищет все записи аудита по request_id"""
     results = []
     try:
-        with open(log_file, "r", encoding="utf-8") as f:
+        with open(log_file, "r", encoding="utf-8-sig") as f:
             for line in f:
                 if request_id in line:
                     results.append(line.strip())

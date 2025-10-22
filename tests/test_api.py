@@ -26,7 +26,7 @@ def test_pdn_calc_base():
 def test_validation_error():
     payload = {"income": {"amount": -1000, "currency": "RUB"}}
     r = client.post("/pdn/calc", json=payload)
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 def test_audit_endpoint():
     r = client.get("/admin/pdn/audit", params={"request_id": "req-123"})

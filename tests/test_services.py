@@ -33,7 +33,7 @@ def test_pdn_stress():
     assert result["pdn_percent"] > 0
 
 def test_pdn_target_refinance():
-    refinance = [{"name": "Ипотека", "monthly_payment": 20000}]
+    refinance = [{"name": "Ипотека", "monthly_payment": 20000, "type": "loan"}]
     req = make_request({"scenario": {"mode": "target", "income_shock_pct": 0, "payment_shock_pct": 0, "refinance": refinance}})
     result = calculate_pdn(req)
     assert any(o["monthly"] == 20000 for o in result["breakdown"] if o["name"] == "Ипотека")
