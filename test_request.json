@@ -1,0 +1,36 @@
+{
+  "subject_type": "individual",
+  "period_months": 6,
+  "income": {
+    "amount": 100000,
+    "currency": "RUB",
+    "income_type": "net",
+    "source": "salary"
+  },
+  "obligations": [
+    {
+      "type": "credit_card",
+      "balance": 50000,
+      "min_payment_rate": 0.05,
+      "name": "Visa"
+    },
+    {
+      "type": "loan",
+      "monthly_payment": 10000,
+      "name": "Car Loan"
+    }
+  ],
+  "scenario": {
+    "mode": "stress",
+    "income_shock_pct": -0.1,
+    "payment_shock_pct": 0.2
+  },
+  "assumptions": {
+    "credit_card_default_min_rate": 0.05,
+    "rounding": 2
+  },
+  "meta": {
+    "client_id": "CLIENT123",
+    "calc_version": "v1.0"
+  }
+}
