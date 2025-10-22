@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Header, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from datetime import datetime, timezone
 import time
 import uuid
+import os
 
 from app.models import PDNRequestSchema, CalcResultSchema
 from app.services import calculate_pdn
@@ -70,9 +72,9 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-# --- GET / (Health check) ---
-@app.get("/")
-async def root():
+# --- GET /health ---
+@app.get("/health")
+async def health_check():
     return {"message": "PDN Calculator API is running!"}
 
 
@@ -82,14 +84,12 @@ async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v
     request_id = request.state.request_id
     start_time = time.time()
 
-    # --- Валидация входного JSON ---
     try:
         payload = await request.json()
         pdn_request = PDNRequestSchema(**payload)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
 
-    # --- Расчёт PDN ---
     try:
         pdn_result: CalcResultSchema = calculate_pdn(pdn_request)
     except ValueError as e:
@@ -98,7 +98,6 @@ async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v
     duration_ms = int((time.time() - start_time) * 1000)
     ts = datetime.now(timezone.utc).isoformat()
 
-    # --- Логирование и аудит ---
     audit_data = {
         "request_id": request_id,
         "client_id": getattr(pdn_request, "client_id", None),
@@ -112,7 +111,6 @@ async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v
     logger.info(f"AUDIT_LOG: {audit_data}")
     write_audit_log(request_id, "/pdn/calc", pdn_request.dict(), pdn_result.dict())
 
-    # --- Возврат результата с meta по ТЗ ---
     meta_response = {
         "ts": ts,
         "request_id": request_id,
@@ -137,3 +135,12 @@ async def get_audit(request_id: str):
     if not logs:
         raise HTTPException(status_code=404, detail="Запись не найдена")
     return {"data": logs, "meta": {"ts": datetime.now(timezone.utc).isoformat()}}
+
+
+# --- Отдача фронтенда ---
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
+@app.get("/")
+def serve_index():
+    index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    return FileResponse(index_path)
