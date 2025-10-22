@@ -3,9 +3,8 @@ from fastapi.responses import JSONResponse
 from datetime import datetime, timezone
 import time
 import uuid
-import logging
 
-from app.models import PDNRequestSchema
+from app.models import PDNRequestSchema, CalcResultSchema
 from app.services import calculate_pdn
 from app.logger import logger
 from app.audit import write_audit_log, read_audit_by_request_id
@@ -20,8 +19,8 @@ app = FastAPI(
 # --- Конфигурация ---
 CONFIG = {
     "risk_bands": ["low", "medium", "high"],
-    "cc_default_rate": 0.35,
-    "calc_version": "1.0"
+    "credit_card_default_min_rate": 0.05,
+    "calc_version": "v1.0"
 }
 
 
@@ -53,10 +52,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "error": {
-                "code": exc.status_code,
-                "message": exc.detail
-            },
+            "error": {"code": exc.status_code, "message": exc.detail},
             "meta": {"ts": datetime.now(timezone.utc).isoformat()}
         }
     )
@@ -68,10 +64,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "error": {
-                "code": 500,
-                "message": "Internal Server Error"
-            },
+            "error": {"code": 500, "message": "Internal Server Error"},
             "meta": {"ts": datetime.now(timezone.utc).isoformat()}
         }
     )
@@ -87,54 +80,59 @@ async def root():
 @app.post("/pdn/calc")
 async def pdn_calc(request: Request, x_pdn_calc_version: str = Header(default="v1.0")):
     request_id = request.state.request_id
-    start = time.time()
+    start_time = time.time()
 
+    # --- Валидация входного JSON ---
     try:
         payload = await request.json()
-        pdn_request = PDNRequestSchema(**payload)  # 🔹 вот эта строчка
+        pdn_request = PDNRequestSchema(**payload)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
 
+    # --- Расчёт PDN ---
     try:
-        pdn_result = calculate_pdn(pdn_request)
+        pdn_result: CalcResultSchema = calculate_pdn(pdn_request)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    duration_ms = int((time.time() - start) * 1000)
+    duration_ms = int((time.time() - start_time) * 1000)
     ts = datetime.now(timezone.utc).isoformat()
 
+    # --- Логирование и аудит ---
     audit_data = {
         "request_id": request_id,
+        "client_id": getattr(pdn_request, "client_id", None),
         "subject_type": pdn_request.subject_type,
         "calc_version": x_pdn_calc_version,
         "scenario": pdn_request.scenario.mode,
-        "pdn_ratio": pdn_result.pdn_ratio,
+        "pdn_percent": pdn_result.pdn_percent,
         "ts": ts,
         "duration_ms": duration_ms
     }
-
     logger.info(f"AUDIT_LOG: {audit_data}")
     write_audit_log(request_id, "/pdn/calc", pdn_request.dict(), pdn_result.dict())
 
-    return {"data": pdn_result.dict(), "meta": {"ts": ts, "request_id": request_id}}
+    # --- Возврат результата с meta по ТЗ ---
+    meta_response = {
+        "ts": ts,
+        "request_id": request_id,
+        "client_id": getattr(pdn_request, "client_id", None)
+    }
+
+    return {"data": pdn_result.dict(), "meta": meta_response}
 
 
 # --- GET /pdn/config ---
 @app.get("/pdn/config")
 async def get_config():
-    """
-    Возвращает текущие параметры расчёта PDN.
-    """
+    """Возвращает текущие параметры расчёта PDN."""
     return {"data": CONFIG, "meta": {"ts": datetime.now(timezone.utc).isoformat()}}
 
 
 # --- GET /admin/pdn/audit ---
 @app.get("/admin/pdn/audit")
 async def get_audit(request_id: str):
-    """
-    Возвращает audit-запись по request_id.
-    ⚠️ В продакшене сюда нужен RBAC (например, роль ADMIN).
-    """
+    """Возвращает audit-запись по request_id. В продакшене нужен RBAC."""
     logs = read_audit_by_request_id(request_id)
     if not logs:
         raise HTTPException(status_code=404, detail="Запись не найдена")

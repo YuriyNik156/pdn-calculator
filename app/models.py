@@ -1,18 +1,24 @@
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Union
 from pydantic import BaseModel, Field, validator, model_validator
+
 
 # --- Входные модели --- #
 
 class IncomeSchema(BaseModel):
-    source: str = Field(..., description="Источник дохода (например, salary, business, rent)")
     amount: float = Field(..., gt=0, description="Размер дохода")
     currency: str = Field(..., min_length=3, max_length=3, description="Валюта (ISO код, например, RUB, USD, EUR)")
+    income_type: Literal["net", "gross"] = Field("net", description="Тип дохода: net или gross")
+    source: str = Field(..., description="Источник дохода (например, payroll, business, rent)")
+
 
 class ObligationSchema(BaseModel):
-    type: str
-    monthly_payment: Optional[float] = None
-    balance: Optional[float] = None
-    min_payment_rate: Optional[float] = None
+    type: Literal["loan", "credit_card", "alimony", "installment", "other"]
+    monthly_payment: Optional[float] = Field(None, ge=0, description="Ежемесячный платёж (если известен)")
+    balance: Optional[float] = Field(None, ge=0, description="Баланс (для кредитных карт)")
+    min_payment_rate: Optional[float] = Field(None, ge=0, le=1, description="Минимальный платёж в % для карт")
+    currency: Optional[str] = Field("RUB", min_length=3, max_length=3, description="Валюта")
+    name: Optional[str] = Field(None, description="Название обязательства (например, Ипотека)")
+
 
     @model_validator(mode="after")
     def validate_payment_combo(self):
@@ -22,7 +28,6 @@ class ObligationSchema(BaseModel):
             and self.min_payment_rate is not None
             and self.min_payment_rate > 0
         )
-
         if not (has_payment or has_balance_rate):
             raise ValueError(
                 "Должен быть указан либо monthly_payment > 0, либо balance и min_payment_rate"
@@ -30,34 +35,56 @@ class ObligationSchema(BaseModel):
         return self
 
 
+class RefinanceSchema(BaseModel):
+    monthly_payment: Optional[float] = Field(None, ge=0)
+    balance: Optional[float] = Field(None, ge=0)
+    min_payment_rate: Optional[float] = Field(None, ge=0, le=1)
+    name: Optional[str] = None
+
+
 class ScenarioSchema(BaseModel):
-    mode: Literal["base", "stress"] = Field(..., description="Режим расчёта (base или stress)")
-    shock: Optional[float] = Field(0.0, ge=-0.5, le=1.0, description="Шок для стресс-сценария (-0.5 … +1.0)")
+    mode: Literal["base", "stress", "target"] = Field(..., description="Режим расчёта")
+    income_shock_pct: Optional[float] = Field(0.0, ge=-1.0, le=1.0, description="Шок дохода (-100% … +100%)")
+    payment_shock_pct: Optional[float] = Field(0.0, ge=-1.0, le=1.0, description="Шок платежей (-100% … +100%)")
+    refinance: Optional[RefinanceSchema] = None
 
 
 class AssumptionsSchema(BaseModel):
-    pdn_limit: float = Field(0.5, ge=0, le=1, description="Предельный уровень ПДН (по умолчанию 50%)")
-    stress_factor: float = Field(1.3, ge=1.0, le=2.0, description="Множитель для стресс-сценария")
+    credit_card_default_min_rate: float = Field(0.05, ge=0, le=1, description="Минимальная ставка по кредитной карте")
+    rounding: int = Field(2, ge=0, description="Округление денежных значений и процентов")
 
 
 class MetaSchema(BaseModel):
-    ts: Optional[str] = Field(None, description="Timestamp запроса (опционально)")
-    calc_version: str = Field("0.1.0", description="Версия расчёта")
-    risk_band: Optional[str] = Field(None, description="Риск-категория (опционально)")
+    client_id: Optional[str] = Field(None, description="ID клиента")
+    request_id: Optional[str] = Field(None, description="UUID запроса")
+    ts: Optional[str] = Field(None, description="Timestamp запроса")
 
 
 class PDNRequestSchema(BaseModel):
-    subject_type: Literal["individual", "organization"] = "individual"
-    incomes: List[IncomeSchema]
+    subject_type: Literal["individual", "business"] = "individual"
+    period_months: Optional[int] = Field(6, ge=1, description="Период дохода в месяцах")
+    income: IncomeSchema
     obligations: List[ObligationSchema]
     scenario: ScenarioSchema
     assumptions: Optional[AssumptionsSchema] = None
     meta: Optional[MetaSchema] = None
 
+
 # --- Выходная модель --- #
 
+class BreakdownItemSchema(BaseModel):
+    name: str
+    monthly: float
+
+
 class CalcResultSchema(BaseModel):
-    pdn_ratio: float = Field(..., ge=0, le=1, description="Рассчитанный коэффициент ПДН (Debt-to-Income)")
-    status: Literal["ok", "warning", "error"]
-    breakdown: dict = Field(..., description="Расшифровка расчёта по доходам и обязательствам")
+    calc_version: str
+    currency: str
+    monthly_obligations_total: float
+    monthly_income_used: float
+    pdn_percent: float
+    risk_band: Literal["LOW", "MID", "HIGH"]
+    breakdown: List[BreakdownItemSchema]
+    scenario_applied: str
+    advice: Optional[str] = None
     meta: MetaSchema
