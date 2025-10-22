@@ -18,6 +18,8 @@ class JsonFormatter(logging.Formatter):
         # Добавляем дополнительные поля, если они есть
         if hasattr(record, "request_id"):
             log_record["request_id"] = record.request_id
+        if hasattr(record, "client_id"):
+            log_record["client_id"] = record.client_id
 
         return json.dumps(log_record, ensure_ascii=False)
 

@@ -26,6 +26,7 @@ def write_audit_log(request_id: str, endpoint: str, payload: Dict[str, Any], res
     entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "request_id": request_id,
+        "client_id": payload.get("client_id"),
         "endpoint": endpoint,
         "payload": mask_sensitive_data(payload),
         "result": result,
