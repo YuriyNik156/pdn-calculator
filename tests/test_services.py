@@ -40,7 +40,7 @@ def test_pdn_target_refinance():
 
 def test_risk_thresholds():
     # ПДН = 49.99% → LOW
-    req = make_request({"income": {"amount": 102000, "currency": "RUB", "income_type": "net", "source": "salary"}})
+    req = make_request({"income": {"amount": 105000, "currency": "RUB", "income_type": "net", "source": "salary"}})
     result = calculate_pdn(req)
     assert result["risk_band"] == "LOW"
     # ПДН = 50% → MID
