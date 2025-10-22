@@ -142,5 +142,6 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 
 @app.get("/")
 def serve_index():
+    print(">>> INDEX ROUTE CALLED <<<")
     index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     return FileResponse(index_path)
