@@ -14,7 +14,7 @@ from app.services import calculate_pdn, calc_business_metrics, get_config, updat
 from app.audit import get_audit_by_request
 from app.docs.openapi_overrides import custom_openapi
 from app.auth import require_admin
-from app.utils import mask_sensitive  # Функция маскирования персональных данных в логах
+from app.security import mask_sensitive  # Функция маскирования персональных данных в логах
 
 APP_VERSION = "v1.0"
 
@@ -118,5 +118,6 @@ app.openapi = lambda: custom_openapi(app)
 # -----------------------
 @app.get("/health")
 @limiter.limit("10/minute")
-async def health_check():
+async def health_check(request: Request):
     return {"status": "ok"}
+

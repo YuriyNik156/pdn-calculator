@@ -1,17 +1,10 @@
-# Базовый образ с Python
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Рабочая директория внутри контейнера
 WORKDIR /app
-
-# Копируем файлы проекта
-COPY . /app
-
-# Устанавливаем зависимости
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Открываем порт
-EXPOSE 8000
+COPY . .
 
-# Команда запуска приложения
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdn-calculator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pdn
+  template:
+    metadata:
+      labels:
+        app: pdn
+    spec:
+      containers:
+      - name: pdn
+        image: your_docker_image:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pdn-secrets
+              key: SECRET_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdn-service
+spec:
+  selector:
+    app: pdn
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: LoadBalancer
