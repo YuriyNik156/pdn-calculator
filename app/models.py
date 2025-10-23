@@ -116,6 +116,7 @@ class BusinessInput(BaseModel):
     principal: float
     taxes: float = 0
     currency: str = "RUB"
+    meta: MetaSchema
 
 
 class BusinessResult(BaseModel):
@@ -127,6 +128,7 @@ class BusinessResult(BaseModel):
     pdn_business_percent: float
     risk_band: str
     meta: MetaSchema
+    advice: str
 
 
 # --------------------------
