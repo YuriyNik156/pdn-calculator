@@ -1,38 +1,47 @@
 import logging
-from datetime import datetime
+from pathlib import Path
+from app.security import mask_sensitive
 
+# Логгер аудита
 logger = logging.getLogger("pdn_audit")
 logger.setLevel(logging.INFO)
-handler = logging.FileHandler("audit.log")
+log_path = Path("audit.log")
+log_path.touch(exist_ok=True)
+handler = logging.FileHandler(log_path, encoding="utf-8")
 formatter = logging.Formatter('%(asctime)s | %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+
 def log_request(request_data: dict):
-    """Логируем входной запрос без ПДН и с псевдонимизацией client_id"""
-    data_copy = request_data.copy()
-    if "meta" in data_copy and "client_id" in data_copy["meta"]:
-        client_id = data_copy["meta"]["client_id"]
-        data_copy["meta"]["client_id"] = f"{hash(client_id) & 0xffffffff:08x}"
-    logger.info(f"REQUEST: {data_copy}")
+    """
+    Логируем входной запрос без ПДН и с псевдонимизацией client_id и request_id.
+    """
+    masked_data = mask_sensitive(request_data)
+    logger.info(f"REQUEST: {masked_data}")
+
 
 def log_response(request_id: str, response_data: dict):
-    """Логируем ответ без ПДН"""
-    response_copy = response_data.copy()
+    """
+    Логируем ответ без ПДН и breakdown, с маскировкой meta-полей.
+    """
+    response_copy = mask_sensitive(response_data)
     response_copy.pop("pdn_percent", None)
     response_copy.pop("breakdown", None)
     logger.info(f"RESPONSE ({request_id}): {response_copy}")
 
+
 def get_audit_by_request(request_id: str, log_file="audit.log"):
-    """Ищет все записи аудита по request_id"""
+    """
+    Ищет все записи аудита по request_id
+    """
     results = []
     try:
-        # Пробуем открыть в UTF-8
+        # Чтение в UTF-8, fallback на cp1251
         try:
             with open(log_file, "r", encoding="utf-8-sig") as f:
                 lines = f.readlines()
         except UnicodeDecodeError:
-            # Если не получилось — читаем в cp1251
             with open(log_file, "r", encoding="cp1251", errors="ignore") as f:
                 lines = f.readlines()
 
