@@ -6,13 +6,14 @@
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         label { display: block; margin-top: 10px; }
-        input, select { margin-top: 2px; padding: 5px; width: 200px; }
-        button { margin-top: 10px; padding: 5px 10px; }
+        input, select { margin-top: 2px; padding: 5px; width: 220px; }
+        button { margin-top: 10px; padding: 6px 12px; }
         .obligation { margin-bottom: 5px; }
         .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
         .risk-LOW { color: green; }
         .risk-MID { color: orange; }
         .risk-HIGH { color: red; }
+        hr { border: 0; border-top: 1px dashed #aaa; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -20,6 +21,15 @@
 <h2>PDN Calculator MVP</h2>
 
 <form id="pdnForm">
+
+    <h4>Тип субъекта</h4>
+    <label>
+        <select id="subjectType">
+            <option value="individual" selected>Физлицо (individual)</option>
+            <option value="business">Бизнес (business)</option>
+        </select>
+    </label>
+
     <h4>Доход</h4>
     <label>
         Сумма:
@@ -83,7 +93,7 @@
 
     <h4>Настройки (assumptions)</h4>
     <label>
-        Минимальный платёж по кредитным картам (%):
+        Мин. платёж по кредитным картам (%):
         <input type="number" id="defaultMinPaymentRate" step="0.01" value="0.05">
     </label>
     <label>
@@ -125,6 +135,14 @@ function addObligation() {
             </select>
         </label>
         <label>
+            Валюта:
+            <select id="obl_currency_${obligationCount}">
+                <option value="RUB" selected>RUB</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+            </select>
+        </label>
+        <label>
             Баланс:
             <input type="number" id="obl_balance_${obligationCount}" step="any">
         </label>
@@ -133,7 +151,7 @@ function addObligation() {
             <input type="number" id="obl_monthly_${obligationCount}" step="any">
         </label>
         <label>
-            Минимальный платёж (%):
+            Мин. платёж (%):
             <input type="number" id="obl_min_${obligationCount}" step="0.01">
         </label>
         <label>
@@ -168,12 +186,12 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
     const obligations = [];
     for(let i=1; i<=obligationCount; i++){
         const type = document.getElementById(`obl_type_${i}`).value;
+        const currency = document.getElementById(`obl_currency_${i}`).value;
         const balance = parseFloat(document.getElementById(`obl_balance_${i}`).value) || undefined;
         const monthly_payment = parseFloat(document.getElementById(`obl_monthly_${i}`).value) || undefined;
         const min_payment_rate = parseFloat(document.getElementById(`obl_min_${i}`).value) || undefined;
         const name = document.getElementById(`obl_name_${i}`).value || undefined;
-
-        obligations.push({type, balance, monthly_payment, min_payment_rate, name});
+        obligations.push({type, balance, monthly_payment, min_payment_rate, name, currency});
     }
 
     // Сценарий
@@ -195,7 +213,7 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
     };
 
     const payload = {
-        subject_type: "individual",
+        subject_type: document.getElementById('subjectType').value,
         period_months: parseInt(document.getElementById('periodMonths').value),
         income,
         obligations,
@@ -228,11 +246,16 @@ function displayResult(data){
     }
 
     const d = data.data;
-    let html = `<p><strong>PDN:</strong> ${d.pdn_percent}%</p>`;
+    let html = `<h3>Результаты расчёта</h3>`;
+    html += `<p><strong>PDN:</strong> ${d.pdn_percent}%</p>`;
     html += `<p><strong>Risk Band:</strong> <span class="risk-${d.risk_band}">${d.risk_band}</span></p>`;
-    html += `<p><strong>Breakdown:</strong></p><ul>`;
+    html += `<p><strong>Валюта расчёта:</strong> ${d.currency}</p>`;
+    html += `<p><strong>Сценарий:</strong> ${d.scenario_applied}</p>`;
+    html += `<p><strong>Комментарий:</strong> ${d.advice}</p>`;
+    html += `<h4>Breakdown:</h4><ul>`;
     d.breakdown.forEach(b => html += `<li>${b.name}: ${b.monthly}</li>`);
     html += `</ul>`;
+    html += `<p><strong>Версия формулы:</strong> ${data.calc_version}</p>`;
     document.getElementById('result').innerHTML = html;
 }
 </script>

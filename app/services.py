@@ -1,5 +1,5 @@
-from .models import PDNRequestSchema, ObligationSchema
-from .audit import log_request, log_response
+from app.models import PDNRequestSchema, ObligationSchema
+from app.audit import log_request, log_response
 from datetime import datetime
 
 def calculate_pdn(request: PDNRequestSchema):
