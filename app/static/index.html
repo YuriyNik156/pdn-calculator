@@ -2,14 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>PDN Calculator MVP</title>
+    <title>PDN Calculator MVP - Debug</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         label { display: block; margin-top: 10px; }
         input, select { margin-top: 2px; padding: 5px; width: 220px; }
         button { margin-top: 10px; padding: 6px 12px; }
         .obligation { margin-bottom: 5px; }
-        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
+        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; white-space: pre-wrap; }
         .risk-LOW { color: green; }
         .risk-MID { color: orange; }
         .risk-HIGH { color: red; }
@@ -18,40 +18,32 @@
 </head>
 <body>
 
-<h2>PDN Calculator MVP</h2>
+<h2>PDN Calculator MVP - Debug</h2>
 
 <form id="pdnForm">
 
     <h4>Тип субъекта</h4>
-    <label>
-        <select id="subjectType">
-            <option value="individual" selected>Физлицо (individual)</option>
-            <option value="business">Бизнес (business)</option>
-        </select>
-    </label>
+    <select id="subjectType">
+        <option value="individual" selected>Физлицо (individual)</option>
+        <option value="business">Бизнес (business)</option>
+    </select>
 
     <h4>Доход</h4>
-    <label>
-        Сумма:
-        <input type="number" id="incomeAmount" required min="0" step="any" value="100000">
-    </label>
-    <label>
-        Валюта:
+    <label>Сумма: <input type="number" id="incomeAmount" required min="0" step="any" value="100000"></label>
+    <label>Валюта:
         <select id="incomeCurrency">
             <option value="RUB" selected>RUB</option>
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
         </select>
     </label>
-    <label>
-        Тип дохода:
+    <label>Тип дохода:
         <select id="incomeType">
             <option value="net" selected>net</option>
             <option value="gross">gross</option>
         </select>
     </label>
-    <label>
-        Источник:
+    <label>Источник:
         <select id="incomeSource">
             <option value="salary" selected>salary</option>
             <option value="business">business</option>
@@ -59,10 +51,7 @@
         </select>
     </label>
 
-    <label>
-        Период (месяцев):
-        <input type="number" id="periodMonths" required min="1" value="6">
-    </label>
+    <label>Период (месяцев): <input type="number" id="periodMonths" required min="1" value="6"></label>
 
     <div id="obligationsContainer">
         <h4>Обязательства</h4>
@@ -70,40 +59,23 @@
     <button type="button" id="addObligationBtn">Добавить обязательство</button>
 
     <h4>Сценарий</h4>
-    <label>
-        Mode:
+    <label>Mode:
         <select id="scenarioMode">
             <option value="base">base</option>
             <option value="stress">stress</option>
             <option value="target">target</option>
         </select>
     </label>
-    <label>
-        Шок дохода (%):
-        <input type="number" id="incomeShock" step="0.01" value="0">
-    </label>
-    <label>
-        Шок платежей (%):
-        <input type="number" id="paymentShock" step="0.01" value="0">
-    </label>
+    <label>Шок дохода (%): <input type="number" id="incomeShock" step="0.01" value="0"></label>
+    <label>Шок платежей (%): <input type="number" id="paymentShock" step="0.01" value="0"></label>
     <label id="refinanceLabel" style="display:none;">
         Параметры рефинансирования (JSON):
         <input type="text" id="refinanceInput" placeholder='{"loan_id": "123", "new_monthly_payment": 20000}'>
     </label>
 
     <h4>Настройки (assumptions)</h4>
-    <label>
-        Мин. платёж по кредитным картам (%):
-        <input type="number" id="defaultMinPaymentRate" step="0.01" value="0.05">
-    </label>
-    <label>
-        Округление денег:
-        <input type="number" id="roundingMoney" value="2">
-    </label>
-    <label>
-        Округление процентов:
-        <input type="number" id="roundingPercent" value="2">
-    </label>
+    <label>Мин. платёж по кредитным картам (%): <input type="number" id="defaultMinPaymentRate" step="0.01" value="0.05"></label>
+    <label>Округление (для денег и процентов): <input type="number" id="rounding" value="2"></label>
 
     <button type="submit">Рассчитать PDN</button>
 </form>
@@ -125,8 +97,7 @@ function addObligation() {
     const div = document.createElement('div');
     div.className = 'obligation';
     div.innerHTML = `
-        <label>
-            Тип:
+        <label>Тип:
             <select id="obl_type_${obligationCount}">
                 <option value="loan">loan</option>
                 <option value="credit_card">credit_card</option>
@@ -134,37 +105,24 @@ function addObligation() {
                 <option value="installment">installment</option>
             </select>
         </label>
-        <label>
-            Валюта:
+        <label>Валюта:
             <select id="obl_currency_${obligationCount}">
                 <option value="RUB" selected>RUB</option>
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
             </select>
         </label>
-        <label>
-            Баланс:
-            <input type="number" id="obl_balance_${obligationCount}" step="any">
-        </label>
-        <label>
-            Ежемесячный платёж:
-            <input type="number" id="obl_monthly_${obligationCount}" step="any">
-        </label>
-        <label>
-            Мин. платёж (%):
-            <input type="number" id="obl_min_${obligationCount}" step="0.01">
-        </label>
-        <label>
-            Название:
-            <input type="text" id="obl_name_${obligationCount}">
-        </label>
+        <label>Баланс: <input type="number" id="obl_balance_${obligationCount}" step="any"></label>
+        <label>Ежемесячный платёж: <input type="number" id="obl_monthly_${obligationCount}" step="any"></label>
+        <label>Мин. платёж (%): <input type="number" id="obl_min_${obligationCount}" step="0.01"></label>
+        <label>Название: <input type="text" id="obl_name_${obligationCount}"></label>
         <hr>
     `;
     container.appendChild(div);
 }
 document.getElementById('addObligationBtn').addEventListener('click', addObligation);
 
-// Генерация UUID для meta.request_id
+// Генерация UUID
 function generateUUID() {
     return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
         (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
@@ -174,7 +132,6 @@ function generateUUID() {
 document.getElementById('pdnForm').addEventListener('submit', async function(e){
     e.preventDefault();
 
-    // Доход
     const income = {
         amount: parseFloat(document.getElementById('incomeAmount').value),
         currency: document.getElementById('incomeCurrency').value,
@@ -182,7 +139,6 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
         source: document.getElementById('incomeSource').value
     };
 
-    // Обязательства
     const obligations = [];
     for(let i=1; i<=obligationCount; i++){
         const type = document.getElementById(`obl_type_${i}`).value;
@@ -194,7 +150,6 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
         obligations.push({type, balance, monthly_payment, min_payment_rate, name, currency});
     }
 
-    // Сценарий
     const refinanceRaw = document.getElementById('refinanceInput').value;
     const scenario = {
         mode: document.getElementById('scenarioMode').value,
@@ -203,13 +158,9 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
         refinance: refinanceRaw ? JSON.parse(refinanceRaw) : null
     };
 
-    // Assumptions
     const assumptions = {
         credit_card_default_min_rate: parseFloat(document.getElementById('defaultMinPaymentRate').value),
-        rounding: {
-            money: parseInt(document.getElementById('roundingMoney').value),
-            percent: parseInt(document.getElementById('roundingPercent').value)
-        }
+        rounding: parseInt(document.getElementById('rounding').value)
     };
 
     const payload = {
@@ -233,31 +184,14 @@ document.getElementById('pdnForm').addEventListener('submit', async function(e){
             body: JSON.stringify(payload)
         });
         const data = await res.json();
-        displayResult(data);
+
+        // === Отладка: выводим весь JSON сервера ===
+        document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+
     } catch (err) {
         document.getElementById('result').innerText = "Ошибка запроса: " + err;
     }
 });
-
-function displayResult(data){
-    if(data.error){
-        document.getElementById('result').innerText = `Ошибка: ${data.error.message}`;
-        return;
-    }
-
-    const d = data.data;
-    let html = `<h3>Результаты расчёта</h3>`;
-    html += `<p><strong>PDN:</strong> ${d.pdn_percent}%</p>`;
-    html += `<p><strong>Risk Band:</strong> <span class="risk-${d.risk_band}">${d.risk_band}</span></p>`;
-    html += `<p><strong>Валюта расчёта:</strong> ${d.currency}</p>`;
-    html += `<p><strong>Сценарий:</strong> ${d.scenario_applied}</p>`;
-    html += `<p><strong>Комментарий:</strong> ${d.advice}</p>`;
-    html += `<h4>Breakdown:</h4><ul>`;
-    d.breakdown.forEach(b => html += `<li>${b.name}: ${b.monthly}</li>`);
-    html += `</ul>`;
-    html += `<p><strong>Версия формулы:</strong> ${data.calc_version}</p>`;
-    document.getElementById('result').innerHTML = html;
-}
 </script>
 
 </body>
