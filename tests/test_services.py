@@ -47,3 +47,23 @@ def test_risk_thresholds():
     req = make_request({"income": {"amount": 100000, "currency": "RUB", "income_type": "net", "source": "salary"}})
     result = calculate_pdn(req)
     assert result["risk_band"] == "MID"
+    # ПДН = 80% → HIGH
+    req = make_request({"income": {"amount": 60000}})
+    result = calculate_pdn(req)
+    assert result["risk_band"] == "HIGH"
+
+
+def fx_convert(amount: float, from_currency: str, to_currency: str, rates: dict[str, float]) -> float:
+    if from_currency == to_currency:
+        return amount
+    if from_currency not in rates or to_currency not in rates:
+        raise ValueError("Unknown currency")
+
+    base_from = rates[from_currency]
+    base_to = rates[to_currency]
+
+    # Переводим сумму из валюты from_currency в валюту to_currency через базу (например, RUB)
+    return amount * (base_from / base_to)
+
+
+
