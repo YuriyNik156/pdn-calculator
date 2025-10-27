@@ -150,20 +150,3 @@ def update_config(new_data: dict):
     """Обновляет глобальный конфиг и возвращает его."""
     CONFIG.update(new_data)
     return CONFIG
-
-
-# app/services.py
-def fx_convert(amount: float, from_currency: str, to_currency: str, rates: dict) -> float:
-    """
-    Простейшая функция конвертации валют.
-    rates — словарь вида {'USD': 100.0, 'EUR': 110.0, 'RUB': 1.0}.
-    """
-    if from_currency == to_currency:
-        return round(amount, 2)
-
-    if from_currency not in rates or to_currency not in rates:
-        raise ValueError(f"Unknown currency: {from_currency} or {to_currency}")
-
-    base_amount = amount / rates[from_currency]
-    converted = base_amount * rates[to_currency]
-    return round(converted, 2)
