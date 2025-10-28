@@ -202,8 +202,8 @@
     │   ├── main.py             # Точка входа FastAPI
     │   ├── models.py           # Pydantic-схемы (Request/Response)
     │   ├── services.py         # Логика расчёта PDN
-    │   ├── security.py         # Вспомогательные функции (нормализация, маскирование)
-    │   ├── auth.py             # Безопасность
+    │   ├── security.py         # Маскирование
+    │   ├── auth.py             # Авторизация
     │   ├── logger.py           # Настройка логирования
     │   ├── config.py           # Конфигурация
     │   ├── audit.py            # Аудит запросов
